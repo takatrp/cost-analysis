@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>02_月次業務_原価分析（D1～M27再現・コンパクト版）r3</title>
+<title>月次業務 原価分析ツール r4</title>
 <style>
   :root{ --brand:#578899; --grid:#e5e7eb; --bg:#f7f9fb; --text:#111827; --muted:#6b7280; --neg:#dc2626; }
   *{ box-sizing:border-box }
@@ -23,12 +23,12 @@
 
   .sheet{ width:100%; border-collapse:separate; border-spacing:0; background:#fff; border:1px solid var(--grid); border-radius:10px; overflow:hidden; margin-top:8px }
   .sheet th,.sheet td{
-    padding:4px 6px;                   /* ← 高さを低く */
+    padding:4px 6px;
     border-bottom:1px solid var(--grid);
     border-right:1px solid var(--grid);
     font-variant-numeric:tabular-nums;
-    font-size:12px;                    /* ← 文字を小さく */
-    line-height:1.2;                   /* ← 行間を詰める */
+    font-size:12px;
+    line-height:1.2;
   }
   .sheet th:last-child,.sheet td:last-child{ border-right:none }
   .sheet tr:last-child td{ border-bottom:none }
@@ -61,7 +61,7 @@
 <body>
 <header>
   <div class="wrap">
-    <h1>02_月次業務_原価分析 ツール（D1～M27 表示再現・コンパクト）<span class="note"> r3</span></h1>
+    <h1>月次業務 原価分析ツール <span class="note">r4</span></h1>
     <div class="kpi" id="kpi">
       <div class="box"><div class="t">月額報酬（B2）</div><div class="v" id="kpi_fee">-</div></div>
       <div class="box"><div class="t">L 合計（L27＝ΣL4:L26）</div><div class="v" id="kpi_L">-</div></div>
@@ -98,9 +98,9 @@
     </div>
   </section>
 
-  <!-- D1～M27 をそのままの並びで再現（％は 0.1 → 10% 表示）-->
+  <!-- 表本体（Excel式ロジック準拠。％は 0.1 → 10% 表示）-->
   <section class="panel">
-    <h2>■ D1～M27（元Excelの見出し・配置・式ロジックに準拠）</h2>
+    <h2>■ 原価構造（Excel準拠）</h2>
     <div style="overflow-x:auto">
       <table class="sheet" id="sheetDM">
         <tbody>
@@ -258,7 +258,7 @@
               <span class="inpwrap"><input data-i="12" type="number" step="0.5" value="" class="yen" /><span class="suf">%</span></span>
             </td>
             <td class="right" data-j="12">-</td>
-            <td class="right"><input data-k="12" type="number" step="0.1" value="0" class="yen" /></td>
+            <td class="right"><input data-k="12" type="number" step="0.1" value="0" class="yen /></td>
             <td class="right" data-l="12">0</td>
             <td class="right" data-m="12">-</td>
           </tr>
@@ -463,12 +463,12 @@
             <td class="right" data-m="26">-</td>
           </tr>
 
-          <!-- Row 27 (合計) -->
+          <!-- Row 27 (合計：工数の合計も表示) -->
           <tr data-row="27" class="header-row">
             <td></td><td></td><td></td><td></td><td></td>
             <td class="center bold">　</td>
             <td class="right bold">　</td>
-            <td class="right bold" data-k-sum="1">-</td> <!-- ここに工数合計 -->
+            <td class="right bold" data-k-sum="1">-</td> <!-- 工数合計 -->
             <td class="right bold" data-l="27">-</td>
             <td class="right bold" data-m="27">-</td>
           </tr>
@@ -476,7 +476,7 @@
       </table>
     </div>
     <div style="margin-top:6px" class="note">
-      ※ ％入力は<strong>パーセント表記</strong>（例：10 と入力＝10%）。計算は Excel の式に準拠（J= B2×I、L5=B3×K5、L6=B4×K6、L9=B5×K9、L15=J15、L26=(ΣL4:L25 / (1−I26))×I26、L27=ΣL4:L26、M5=J5−SUM(L5:L6)、その他M=J−L、M27=B2−L27）。
+      ※ ％入力は<strong>パーセント表記</strong>（例：10 と入力＝10%）。計算は Excel の式に準拠（J= B2×I、L5=B3×K5、L6=B4×K6、L9=B5×K9、L15=J15、L26=(ΣL4:L25 / (1−I26))×I26、L27=ΣL4:L26、M5=J5−SUM(L5:L6)、その他M=J−L、M27=B2−L27）。最上部の結果表示はマイナスで赤字表示。
     </div>
   </section>
 </main>
@@ -525,10 +525,8 @@
     // I列：UIは％表示（10→10%）。state.I は小数（0.1）で保持。
     document.querySelectorAll('input[data-i]').forEach(inp=>{
       const r = Number(inp.getAttribute('data-i'));
-      // 初期表示
       const frac = state.I[r];
       inp.value = isBlank(frac) ? "" : (Number(frac)*100);
-      // 入力イベント（空なら null、数値なら 100 で割って小数へ）
       inp.addEventListener("input", e=>{
         const v = e.target.value;
         state.I[r] = (v==="" ? null : Number(v)/100);
@@ -550,13 +548,11 @@
         I:  {4:0.10,5:0.40,6:null,7:null,8:null,9:0.20,10:null,11:null,12:null,13:null,14:null,15:0.20,16:null,17:null,18:null,19:null,20:null,21:null,22:null,23:null,24:null,25:null,26:0.10},
         K:  {4:0, 5:4, 6:0.5, 7:0, 8:0, 9:0.5, 10:0,11:0,12:0,13:0,14:0,15:0,16:0,17:0,18:0,19:0,20:0,21:0,22:0,23:0,24:0,25:0,26:0}
       });
-      // UI 値を％表記に更新
       document.querySelectorAll('input[data-i]').forEach(inp=>{
         const r = Number(inp.getAttribute('data-i'));
         const frac = state.I[r];
         inp.value = isBlank(frac) ? "" : (Number(frac)*100);
       });
-      // 工数
       document.querySelectorAll('input[data-k]').forEach(inp=>{
         const r = Number(inp.getAttribute('data-k'));
         inp.value = state.K[r];
