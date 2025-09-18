@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>02_月次業務_原価分析（D1～M27再現版）r2</title>
+<style>
+  :root{ --brand:#578899; --grid:#e5e7eb; --bg:#f7f9fb; --text:#111827; --muted:#6b7280; }
+  *{ box-sizing:border-box }
+  body{ margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"Noto Sans JP",sans-serif; background:var(--bg); color:var(--text) }
+  header{ position:sticky; top:0; background:#fff; border-bottom:1px solid var(--grid); z-index:9 }
+  .wrap{ max-width:1100px; margin:0 auto; padding:14px 16px }
+  h1{ margin:0 0 4px 0; font-size:18px; color:#0f172a }
+  .note{ color:var(--muted); font-size:12px }
+
+  .panel{ background:#fff; border:1px solid var(--grid); border-radius:12px; padding:12px; margin-top:12px }
+  .panel h2{ font-size:14px; margin:0 0 8px 0 }
+  .grid2{ display:grid; grid-template-columns:repeat(4, minmax(180px,1fr)); gap:8px }
+  label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px }
+  input[type="number"]{ width:100%; padding:8px 10px; font-size:16px; border:1px solid #d1d5db; border-radius:10px }
+  .yen{ text-align:right }
+
+  .sheet{ width:100%; border-collapse:separate; border-spacing:0; background:#fff; border:1px solid var(--grid); border-radius:12px; overflow:hidden; margin-top:12px }
+  .sheet th,.sheet td{ padding:8px 10px; border-bottom:1px solid var(--grid); border-right:1px solid var(--grid); font-variant-numeric:tabular-nums; }
+  .sheet th:last-child,.sheet td:last-child{ border-right:none }
+  .sheet tr:last-child td{ border-bottom:none }
+  .center{ text-align:center }
+  .right{ text-align:right }
+  .bold{ font-weight:700 }
+  .header-row{ background:#f1f5f9; font-weight:700 }
+  .subhead{ color:#374151; font-weight:700; background:#f8fafc }
+  .gap-pos{ color:#16a34a; font-weight:700 }
+  .gap-neg{ color:#dc2626; font-weight:700 }
+  .sticky-head th{ position:sticky; top:64px; background:#fff; z-index:5 }
+  .pill{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; background:#eef2ff; border:1px solid var(--grid); color:#374151 }
+
+  .kpi{ display:flex; gap:12px; flex-wrap:wrap; margin-top:8px }
+  .kpi .box{ flex:1 1 200px; background:#f1f5f9; border:1px solid var(--grid); border-radius:12px; padding:10px }
+  .kpi .v{ font-weight:800; font-size:18px }
+  .btn{ appearance:none; border:1px solid var(--grid); background:#fff; border-radius:10px; padding:8px 12px; cursor:pointer }
+  .btn.primary{ border-color:var(--brand); background:var(--brand); color:#fff }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr 1fr } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>02_月次業務_原価分析 ツール（D1～M27 表示再現）<span class="note"> r2</span></h1>
+    <div class="kpi" id="kpi">
+      <div class="box"><div class="t note">月額報酬（B2）</div><div class="v" id="kpi_fee">-</div></div>
+      <div class="box"><div class="t note">L 合計（L27＝ΣL4:L26）</div><div class="v" id="kpi_L">-</div></div>
+      <div class="box"><div class="t note">M 合計（M27＝B2−L27）</div><div class="v" id="kpi_M">-</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- パラメータ（B2～B5） -->
+  <section class="panel">
+    <h2>■ パラメータ（Excelの B2～B5）</h2>
+    <div class="grid2">
+      <div>
+        <label>月額報酬（B2, 円）</label>
+        <input id="B2_fee" type="number" inputmode="numeric" step="100" value="30000" class="yen" />
+      </div>
+      <div>
+        <label>想定工数 単価（B3, プレイング 円/時）</label>
+        <input id="B3_rate_player" type="number" inputmode="numeric" step="100" value="3000" class="yen" />
+      </div>
+      <div>
+        <label>マネジメント 単価（B4, 管理者 円/時）</label>
+        <input id="B4_rate_manager" type="number" inputmode="numeric" step="100" value="5000" class="yen" />
+      </div>
+      <div>
+        <label>マネジメント 単価（B5, 経営 円/時）</label>
+        <input id="B5_rate_exec" type="number" inputmode="numeric" step="100" value="15000" class="yen" />
+      </div>
+    </div>
+    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+      <button class="btn" id="btnReset">％・工数をExcel初期値に戻す</button>
+      <button class="btn primary" id="btnRecalc">再計算</button>
+    </div>
+  </section>
+
+  <!-- D1～M27 をそのままの並びで再現 -->
+  <section class="panel">
+    <h2>■ D1～M27（元Excelの見出し・配置・式ロジックに準拠）</h2>
+    <div style="overflow-x:auto">
+      <table class="sheet" id="sheetDM">
+        <tbody>
+          <!-- Row 1 -->
+          <tr>
+            <td class="bold" colspan="10">■対象：月次業務</td>
+          </tr>
+
+          <!-- Row 2 -->
+          <tr class="subhead">
+            <td class="bold">原価構造</td>
+            <td></td><td></td><td></td><td></td>
+            <td class="center bold">想定</td>
+            <td></td>
+            <td class="center bold">パラメータ</td>
+            <td></td>
+            <td class="center bold">ギャップ</td>
+          </tr>
+
+          <!-- Row 3 header labels -->
+          <tr class="header-row">
+            <td class="center">L0</td>
+            <td class="center">L1</td>
+            <td class="center">L2</td>
+            <td class="center">L3</td>
+            <td class="center">L4</td>
+            <td class="center">％</td>
+            <td class="center">金額</td>
+            <td class="center">工数</td>
+            <td class="center">内訳</td>
+            <td class="center">　</td>
+          </tr>
+
+          <!-- Row 4 -->
+          <tr data-row="4">
+            <td>報酬</td>
+            <td>原価</td>
+            <td>直接原価</td>
+            <td>システム利用料</td>
+            <td></td>
+            <td class="right"><input data-i="4" type="number" step="0.01" placeholder="" value="0.1" class="yen" /></td>
+            <td class="right" data-j="4">-</td>
+            <td class="right"><input data-k="4" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="4">4,000</td>
+            <td class="right" data-m="4">-</td>
+          </tr>
+
+          <!-- Row 5 -->
+          <tr data-row="5">
+            <td></td><td></td><td></td>
+            <td>人件費(法定福利含む)</td>
+            <td>プレイング</td>
+            <td class="right"><input data-i="5" type="number" step="0.01" placeholder="" value="0.4" class="yen" /></td>
+            <td class="right" data-j="5">-</td>
+            <td class="right"><input data-k="5" type="number" step="0.1" placeholder="0" value="4" class="yen" /></td>
+            <td class="right" data-l="5">-</td>
+            <td class="right" data-m="5">-</td>
+          </tr>
+
+          <!-- Row 6 -->
+          <tr data-row="6">
+            <td></td><td></td><td></td>
+            <td></td>
+            <td>マネジメント(管理者)</td>
+            <td class="right"><input data-i="6" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="6">-</td>
+            <td class="right"><input data-k="6" type="number" step="0.1" placeholder="0" value="0.5" class="yen" /></td>
+            <td class="right" data-l="6">-</td>
+            <td class="right" data-m="6"></td>
+          </tr>
+
+          <!-- Row 7 -->
+          <tr data-row="7">
+            <td></td><td></td><td></td>
+            <td>外注費</td>
+            <td></td>
+            <td class="right"><input data-i="7" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="7">-</td>
+            <td class="right"><input data-k="7" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="7">0</td>
+            <td class="right" data-m="7">-</td>
+          </tr>
+
+          <!-- Row 8 -->
+          <tr data-row="8">
+            <td></td><td></td><td></td>
+            <td>その他雑費</td>
+            <td></td>
+            <td class="right"><input data-i="8" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="8">-</td>
+            <td class="right"><input data-k="8" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="8">0</td>
+            <td class="right" data-m="8">-</td>
+          </tr>
+
+          <!-- Row 9 -->
+          <tr data-row="9">
+            <td></td><td></td>
+            <td>間接原価</td>
+            <td>人件費(法定福利含む)</td>
+            <td>マネジメント(経営)</td>
+            <td class="right"><input data-i="9" type="number" step="0.01" placeholder="" value="0.2" class="yen" /></td>
+            <td class="right" data-j="9">-</td>
+            <td class="right"><input data-k="9" type="number" step="0.1" placeholder="0" value="0.5" class="yen" /></td>
+            <td class="right" data-l="9">-</td>
+            <td class="right" data-m="9">-</td>
+          </tr>
+
+          <!-- Row 10 -->
+          <tr data-row="10">
+            <td></td><td></td><td></td>
+            <td></td>
+            <td>TKC活動費</td>
+            <td class="right"><input data-i="10" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="10">-</td>
+            <td class="right"><input data-k="10" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="10">0</td>
+            <td class="right" data-m="10">-</td>
+          </tr>
+
+          <!-- Row 11 -->
+          <tr data-row="11">
+            <td></td><td></td><td></td>
+            <td></td>
+            <td>教育関連費</td>
+            <td class="right"><input data-i="11" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="11">-</td>
+            <td class="right"><input data-k="11" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="11">0</td>
+            <td class="right" data-m="11">-</td>
+          </tr>
+
+          <!-- Row 12 -->
+          <tr data-row="12">
+            <td></td><td></td><td></td>
+            <td></td>
+            <td>総務経理</td>
+            <td class="right"><input data-i="12" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="12">-</td>
+            <td class="right"><input data-k="12" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="12">0</td>
+            <td class="right" data-m="12">-</td>
+          </tr>
+
+          <!-- Row 13 -->
+          <tr data-row="13">
+            <td></td><td></td><td></td>
+            <td></td>
+            <td>庶務</td>
+            <td class="right"><input data-i="13" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="13">-</td>
+            <td class="right"><input data-k="13" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="13">0</td>
+            <td class="right" data-m="13">-</td>
+          </tr>
+
+          <!-- Row 14 -->
+          <tr data-row="14">
+            <td></td><td></td><td></td>
+            <td>車両費(原価)</td>
+            <td></td>
+            <td class="right"><input data-i="14" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="14">-</td>
+            <td class="right"><input data-k="14" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="14">0</td>
+            <td class="right" data-m="14">-</td>
+          </tr>
+
+          <!-- Row 15 -->
+          <tr data-row="15">
+            <td></td>
+            <td>販管費</td>
+            <td></td>
+            <td>交通費</td>
+            <td></td>
+            <td class="right"><input data-i="15" type="number" step="0.01" placeholder="" value="0.2" class="yen" /></td>
+            <td class="right" data-j="15">-</td>
+            <td class="right"><input data-k="15" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="15">-</td>
+            <td class="right" data-m="15">-</td>
+          </tr>
+
+          <!-- Row 16 -->
+          <tr data-row="16">
+            <td></td><td></td><td></td>
+            <td>広告宣伝費</td>
+            <td></td>
+            <td class="right"><input data-i="16" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="16">-</td>
+            <td class="right"><input data-k="16" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="16">0</td>
+            <td class="right" data-m="16">-</td>
+          </tr>
+
+          <!-- Row 17 -->
+          <tr data-row="17">
+            <td></td><td></td><td></td>
+            <td>採用費</td>
+            <td></td>
+            <td class="right"><input data-i="17" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="17">-</td>
+            <td class="right"><input data-k="17" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="17">0</td>
+            <td class="right" data-m="17">-</td>
+          </tr>
+
+          <!-- Row 18 -->
+          <tr data-row="18">
+            <td></td><td></td><td></td>
+            <td>交際費</td>
+            <td></td>
+            <td class="right"><input data-i="18" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="18">-</td>
+            <td class="right"><input data-k="18" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="18">0</td>
+            <td class="right" data-m="18">-</td>
+          </tr>
+
+          <!-- Row 19 -->
+          <tr data-row="19">
+            <td></td><td></td><td></td>
+            <td>支払報酬</td>
+            <td></td>
+            <td class="right"><input data-i="19" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="19">-</td>
+            <td class="right"><input data-k="19" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="19">0</td>
+            <td class="right" data-m="19">-</td>
+          </tr>
+
+          <!-- Row 20 -->
+          <tr data-row="20">
+            <td></td><td></td><td></td>
+            <td>備品消耗品費</td>
+            <td></td>
+            <td class="right"><input data-i="20" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="20">-</td>
+            <td class="right"><input data-k="20" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="20">0</td>
+            <td class="right" data-m="20">-</td>
+          </tr>
+
+          <!-- Row 21 -->
+          <tr data-row="21">
+            <td></td><td></td><td></td>
+            <td>通信費</td>
+            <td></td>
+            <td class="right"><input data-i="21" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="21">-</td>
+            <td class="right"><input data-k="21" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="21">0</td>
+            <td class="right" data-m="21">-</td>
+          </tr>
+
+          <!-- Row 22 -->
+          <tr data-row="22">
+            <td></td><td></td><td></td>
+            <td>車両費(販管費)</td>
+            <td></td>
+            <td class="right"><input data-i="22" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="22">-</td>
+            <td class="right"><input data-k="22" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="22">0</td>
+            <td class="right" data-m="22">-</td>
+          </tr>
+
+          <!-- Row 23 -->
+          <tr data-row="23">
+            <td></td><td></td><td></td>
+            <td>設備費(減価償却含む)</td>
+            <td></td>
+            <td class="right"><input data-i="23" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="23">-</td>
+            <td class="right"><input data-k="23" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="23">0</td>
+            <td class="right" data-m="23">-</td>
+          </tr>
+
+          <!-- Row 24 -->
+          <tr data-row="24">
+            <td></td><td></td><td></td>
+            <td>光熱費</td>
+            <td></td>
+            <td class="right"><input data-i="24" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="24">-</td>
+            <td class="right"><input data-k="24" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="24">0</td>
+            <td class="right" data-m="24">-</td>
+          </tr>
+
+          <!-- Row 25 -->
+          <tr data-row="25">
+            <td></td><td></td><td></td>
+            <td>地代家賃</td>
+            <td></td>
+            <td class="right"><input data-i="25" type="number" step="0.01" placeholder="" value="" class="yen" /></td>
+            <td class="right" data-j="25">-</td>
+            <td class="right"><input data-k="25" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="25">0</td>
+            <td class="right" data-m="25">-</td>
+          </tr>
+
+          <!-- Row 26 -->
+          <tr data-row="26">
+            <td></td>
+            <td class="bold">利益</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="right"><input data-i="26" type="number" step="0.01" placeholder="" value="0.1" class="yen" /></td>
+            <td class="right" data-j="26">-</td>
+            <td class="right"><input data-k="26" type="number" step="0.1" placeholder="0" value="0" class="yen" /></td>
+            <td class="right" data-l="26">-</td>
+            <td class="right" data-m="26">-</td>
+          </tr>
+
+          <!-- Row 27 (合計) -->
+          <tr data-row="27" class="header-row">
+            <td></td><td></td><td></td><td></td><td></td>
+            <td class="center bold">　</td>
+            <td class="right bold">　</td>
+            <td class="right bold">　</td>
+            <td class="right bold" data-l="27">-</td>
+            <td class="right bold" data-m="27">-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px" class="note">
+      ※ セル配置・文言は <strong>D1～M27</strong> を踏襲。計算は元Excelの式に準拠（J= B2×I、L5=B3×K5、L6=B4×K6、L9=B5×K9、L15=J15、L26=(ΣL4:L25 / (1−I26))×I26、L27=ΣL4:L26、M5=J5−SUM(L5:L6)、その他M=J−L、M27=B2−L27）。
+    </div>
+  </section>
+</main>
+
+<script>
+  // ---- 初期値（Excel準拠） ----
+  const state = {
+    B2: 30000,   // 月額報酬
+    B3: 3000,    // 単価(プレイ)
+    B4: 5000,    // 単価(管理者)
+    B5: 15000,   // 単価(経営)
+    I: { 4:0.1, 5:0.4, 6:null, 7:null, 8:null, 9:0.2, 10:null,11:null,12:null,13:null,14:null,15:0.2,16:null,17:null,18:null,19:null,20:null,21:null,22:null,23:null,24:null,25:null,26:0.1 },
+    K: { 4:0, 5:4, 6:0.5, 7:0, 8:0, 9:0.5, 10:0,11:0,12:0,13:0,14:0,15:0,16:0,17:0,18:0,19:0,20:0,21:0,22:0,23:0,24:0,25:0,26:0 }
+  };
+
+  // ---- ユーティリティ ----
+  const el = (sel) => document.querySelector(sel);
+  const yen = (v) => isFinite(v) ? Math.round(v).toLocaleString("ja-JP") : "-";
+  const numOr0 = (x) => (x===null || x==="" || isNaN(Number(x))) ? 0 : Number(x);
+
+  // ---- 入力とバインド ----
+  function bindParams(){
+    el("#B2_fee").value = state.B2;
+    el("#B3_rate_player").value = state.B3;
+    el("#B4_rate_manager").value = state.B4;
+    el("#B5_rate_exec").value   = state.B5;
+
+    ["B2_fee","B3_rate_player","B4_rate_manager","B5_rate_exec"].forEach(id=>{
+      el("#"+id).addEventListener("input", ()=>{ 
+        state.B2 = numOr0(el("#B2_fee").value);
+        state.B3 = numOr0(el("#B3_rate_player").value);
+        state.B4 = numOr0(el("#B4_rate_manager").value);
+        state.B5 = numOr0(el("#B5_rate_exec").value);
+        recalc();
+      })
+    });
+
+    // I, K 列の入力
+    document.querySelectorAll('input[data-i]').forEach(inp=>{
+      const r = Number(inp.getAttribute('data-i'));
+      if(state.I[r]===null){ inp.value=""; }
+      inp.addEventListener("input", e=>{
+        const v = e.target.value;
+        state.I[r] = (v==="" ? null : numOr0(v));
+        recalc();
+      });
+    });
+    document.querySelectorAll('input[data-k]').forEach(inp=>{
+      const r = Number(inp.getAttribute('data-k'));
+      inp.addEventListener("input", e=>{
+        state.K[r] = numOr0(e.target.value);
+        recalc();
+      });
+    });
+
+    el("#btnReset").addEventListener("click", ()=>{
+      // Excel初期値に戻す
+      Object.assign(state, {
+        I: { 4:0.1, 5:0.4, 6:null, 7:null, 8:null, 9:0.2, 10:null,11:null,12:null,13:null,14:null,15:0.2,16:null,17:null,18:null,19:null,20:null,21:null,22:null,23:null,24:null,25:null,26:0.1 },
+        K: { 4:0, 5:4, 6:0.5, 7:0, 8:0, 9:0.5, 10:0,11:0,12:0,13:0,14:0,15:0,16:0,17:0,18:0,19:0,20:0,21:0,22:0,23:0,24:0,25:0,26:0 }
+      });
+      // 入力欄を反映
+      document.querySelectorAll('input[data-i]').forEach(inp=>{
+        const r = Number(inp.getAttribute('data-i'));
+        const v = state.I[r];
+        inp.value = (v===null ? "" : v);
+      });
+      document.querySelectorAll('input[data-k]').forEach(inp=>{
+        const r = Number(inp.getAttribute('data-k'));
+        inp.value = state.K[r];
+      });
+      recalc();
+    });
+    el("#btnRecalc").addEventListener("click", recalc);
+  }
+
+  // ---- 計算（Excel式準拠） ----
+  function recalc(){
+    const B2 = state.B2, B3=state.B3, B4=state.B4, B5=state.B5;
+
+    // J 列：Jr = B2 * Ir
+    const J = {};
+    for(let r=4;r<=26;r++){
+      const Ir = (state.I[r]===null ? 0 : Number(state.I[r]||0));
+      J[r] = B2 * Ir;
+      const jd = document.querySelector(`[data-j="${r}"]`);
+      if(jd) jd.textContent = (r>=4 ? yen(J[r]) : "");
+    }
+
+    // L 列：行別ロジック
+    const L = {};
+    for(let r=4;r<=26;r++){
+      let v = 0;
+      if(r===4){ v = 4000; }
+      else if(r===5){ v = B3 * numOr0(state.K[5]); }
+      else if(r===6){ v = B4 * numOr0(state.K[6]); }
+      else if(r===9){ v = B5 * numOr0(state.K[9]); }
+      else if(r===15){ v = J[15]; } // =J15
+      else if(r===26){ v = 0; }     // 後で I26 に基づき逆算
+      else { v = 0; }
+      L[r] = v;
+    }
+
+    // L26 = (SUM(L4:L25) / (1 - I26)) * I26
+    const sumL4_25 = Object.entries(L).filter(([rr,_])=> Number(rr)>=4 && Number(rr)<=25).reduce((a,[_r,val])=>a+val,0);
+    const I26 = (state.I[26]===null ? 0 : Number(state.I[26]||0));
+    L[26] = (1 - I26) !== 0 ? (sumL4_25 / (1 - I26)) * I26 : 0;
+
+    // L27 = SUM(L4:L26)
+    const L27 = Object.entries(L).filter(([rr,_])=> Number(rr)>=4 && Number(rr)<=26).reduce((a,[_r,val])=>a+val,0);
+
+    // 画面反映（L 列）
+    for(let r=4;r<=26;r++){
+      const ld = document.querySelector(`[data-l="${r}"]`);
+      if(ld) ld.textContent = yen(L[r]);
+    }
+    const l27d = document.querySelector(`[data-l="27"]`);
+    if(l27d) l27d.textContent = yen(L27);
+
+    // M 列：Excel準拠
+    // M4 = J4 - L4
+    // M5 = J5 - SUM(L5:L6)（ここだけ特殊）
+    // M6 = （空のまま）
+    // M7..25 = J - L
+    // M26 = J26 - L26
+    // M27 = B2 - L27
+    const M = {};
+    M[4]  = (J[4] || 0) - (L[4] || 0);
+    M[5]  = (J[5] || 0) - ((L[5]||0) + (L[6]||0));
+    // M6 空
+    for(let r=7;r<=25;r++){ M[r] = (J[r] || 0) - (L[r] || 0); }
+    M[26] = (J[26] || 0) - (L[26] || 0);
+    M[27] = B2 - L27;
+
+    // 画面反映（M 列）
+    const setM = (r)=>{
+      const md = document.querySelector(`[data-m="${r}"]`);
+      if(!md) return;
+      if(r===6){ md.textContent = ""; return; }
+      const val = M[r];
+      md.textContent = yen(val);
+      md.classList.remove("gap-pos","gap-neg");
+      if(r>=4 && r<=26){
+        if(val>=0) md.classList.add("gap-pos"); else md.classList.add("gap-neg");
+      }
+    };
+    for(let r=4;r<=27;r++){ setM(r); }
+
+    // KPI
+    el("#kpi_fee").textContent = "¥"+yen(B2);
+    el("#kpi_L").textContent   = "¥"+yen(L27);
+    el("#kpi_M").textContent   = "¥"+yen(M[27]);
+  }
+
+  bindParams();
+  recalc();
+</script>
+</body>
+</html>
